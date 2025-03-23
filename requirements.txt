@@ -1,0 +1,4 @@
+Flask
+beautifulsoup4
+ebooklib
+jieba  # 如果需要中文斷詞
