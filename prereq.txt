@@ -1,0 +1,20 @@
+預備工作目錄:
+- "chche/" 子目錄:
+    從 "output/cache_title_html/" 複製所有 html 檔案到這裡的子目錄 "cache/" 中
+- "modules" 子目錄:
+    從 "src/modules/" 複製所有子目錄和檔案到這裡的子目錄 "modules/" 中
+- "titles" 子目錄:
+    複製 "/morph_titles/titles.json" 到這裡的子目錄 "titles/titles.json" 中
+
+測試:
+1. 用 VSCode 測試 (用 VSCode 本身的 python)
+2. 用 docker 進行測試
+    - 要先建立 venv
+    - 準備 Dockerfile 和 requirements.txt
+
+準備上 Render:
+1. 準備連上 Github
+    - 用特定帳號進入 wsl
+    - 連入 github 進入相關工作
+2. 設定 Render 連上 Github
+
