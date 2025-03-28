@@ -1,4 +1,5 @@
 Flask
 beautifulsoup4
 ebooklib
+openpyxl
 jieba  # 如果需要中文斷詞
