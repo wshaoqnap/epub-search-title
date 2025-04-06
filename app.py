@@ -19,7 +19,7 @@ from io import StringIO
 from openpyxl import Workbook
 import tempfile
 
-UPDATE_DATE = '2025/04/04'  # 更新日期
+UPDATE_DATE = '2025/04/06'  # 更新日期
 
 MY_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_HTML_DIR = os.path.join(MY_SCRIPT_DIR, 'cache')
