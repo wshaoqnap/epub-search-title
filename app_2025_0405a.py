@@ -1,13 +1,5 @@
-"""
-本程式修改內容：
-1. 頁面首次載入或重新整理時，強制將右側區域隱藏，並將切換按鈕文字設為「顯示側邊欄」。
-2. 當切換右側側邊欄時，依據變動後的寬度重新計算左側表格固定前三列的 top 值。
-3. 當下拉選單選定後，左側顯示表格內容，並在使用者以滑鼠左鍵點擊表格內（非表頭且非純數字）的儲存格時，
-   右側區域自動顯示（先清空內容），並在右側上方以暗紅色粗體顯示該選定字詞（字體大小與儲存格一致）。
-4. 拖曳分隔線時，左側寬度改變也會重新計算固定表頭。
-5. fetchResult 函式加入 response.ok 檢查，提供更明確錯誤訊息。
-6. 全域監聽 ESC 鍵，按下 ESC 鍵時會呼叫 clearInput() 清除左側表格內容與下拉選單內容。
-"""
+# 2025-0328_1905
+# 調整組裝 book_list 的邏輯, 不再限定 values 為 list 且長度 >=2, 以便顯示更多選項, 更新 UPDATE_DATE
 
 import json
 import os
@@ -39,13 +31,16 @@ except Exception as e:
     books_data = {}
 
 book_list = {}
-for docx in books_data:
+for docx, inner in books_data.items():
     app.logger.info(f"處理檔案: {docx}")
-    for code, values in books_data[docx].items():
+    for code, values in inner.items():
+        # 原本只處理 (list, len>=2)，現在改為所有都加入
         if isinstance(values, list):
             if len(values) >= 2:
+                # 取第二個元素作標題
                 book_list[code] = values[1]
             elif len(values) == 1:
+                # 只有一個元素，直接作標題
                 book_list[code] = values[0]
             else:
                 book_list[code] = "(無標題)"
@@ -54,10 +49,10 @@ for docx in books_data:
 
 formatted_books = []
 for code, title in sorted(book_list.items()):
+    # 格式化選項，例如 "(code) title"
     formatted_books.append(f"({code}) {title}")
 
 app.logger.info(f"總共 {len(formatted_books)} 個選項")
-
 
 @app.route("/get_result/<code>")
 def get_result(code):
@@ -84,6 +79,7 @@ def get_result(code):
         with open(fullpath, "r", encoding="utf-8") as f:
             content = f.read()
         app.logger.debug(f"成功讀取 {found_file}, 檔案大小 {len(content)} bytes")
+        # 修改：只提取 <table>…</table> 內容，作為嵌入片段
         match = re.search(r'(?is)<table.*?</table>', content)
         if match:
             content = match.group(0)
@@ -91,7 +87,6 @@ def get_result(code):
     except Exception as e:
         app.logger.error(f"讀檔案失敗: {e}")
         return f"<p>讀檔案失敗: {e}</p>"
-
 
 @app.route("/download_csv")
 def download_csv():
@@ -109,7 +104,6 @@ def download_csv():
         headers={"Content-Disposition": "attachment;filename=books.csv"}
     )
 
-
 @app.route("/download_xlsx")
 def download_xlsx():
     app.logger.debug("download_xlsx() - 準備匯出 XLSX")
@@ -119,6 +113,7 @@ def download_xlsx():
     ws.append(["CodeAndTitle"])
     for entry in formatted_books:
         ws.append([entry])
+
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     wb.save(tmp.name)
     tmp.seek(0)
@@ -129,8 +124,7 @@ def download_xlsx():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-
-# 前端模板：包含左右版面切割、拖曳分隔線、右側隱藏/顯示切換及固定表頭更新功能
+# 修改：將表格 sticky header 所需的 CSS 與 JavaScript 移到主頁模板中
 template = '''
 <!DOCTYPE html>
 <html lang="zh">
@@ -197,46 +191,15 @@ template = '''
     }
     .button-group { 
       display: flex;
+      justify-content: flex-end;
       gap: 8px;
     }
-    /* 右側隱藏/顯示按鈕 */
-    #toggleSidebarBtn {
-      cursor: pointer;
-      padding: 4px 8px;
-      border: none;
-      background-color: #ddd;
-      border-radius: 4px;
-    }
-    /* 主容器與左右面板 */
-    #mainContainer {
-      display: flex;
-      height: calc(100vh - 150px);
-      border-top: 1px solid #ccc;
-    }
-    #leftPanel, #rightPanel {
-      overflow: auto;
-      padding: 10px;
-    }
-    #leftPanel {
-      width: 75%;
-      padding-top: 0;
-    }
-    #rightPanel {
-      width: 25%;
-      display: none;
-    }
-    /* 左側結果區 */
+    /* 結果區域無額外間隔 */
     #resultContainer {
       margin-top: 0;
       padding-top: 0;
     }
-    /* 分隔線 */
-    #divider {
-      width: 5px;
-      background-color: #333;
-      cursor: col-resize;
-    }
-    /* 表格 */
+    /* 表格樣式：將表頭設為 sticky，由 JavaScript 動態調整 top 值 */
     table {
       border-collapse: collapse;
       width: 100%;
@@ -253,47 +216,33 @@ template = '''
     }
   </style>
   <script>
-    // 全域監聽 ESC 鍵：按下 ESC 清除左側表格與下拉選單內容
-    window.addEventListener("keydown", function(e) {
-      if(e.key === "Escape" || e.keyCode === 27) {
-        console.log("Debug: ESC 鍵按下，清除內容");
-        clearInput();
-      }
-    });
-
+    // 原有的下拉選單與匯出功能程式碼保持不變
     var options = {{ options|tojson }};
     var currentFocus = -1;
     var prevInput = "";
-    var lastRightWidthPercent = 25; // 初始右側區域寬度記錄 (25%)
 
-    
     document.addEventListener("DOMContentLoaded", function(){
-      // 強制隱藏右側區域，並將左側設為 100%、按鈕文字設為「顯示側邊欄」
-      document.getElementById("rightPanel").style.display = "none";
-      document.getElementById("leftPanel").style.width = "100%";
-      document.getElementById("toggleSidebarBtn").textContent = "顯示側邊欄";
-
       console.log("Debug: options from server:", options);
       var searchInput = document.getElementById("searchInput");
       var dropdown = document.getElementById("dropdown");
 
       searchInput.addEventListener("keydown", function(e){
         var items = dropdown.getElementsByTagName("div");
-        if(e.keyCode === 40){ 
+        if(e.keyCode===40){ 
           currentFocus++;
           addActive(items);
           e.preventDefault();
-        } else if(e.keyCode === 38){ 
+        } else if(e.keyCode===38){ 
           currentFocus--;
           addActive(items);
           e.preventDefault();
-        } else if(e.keyCode === 13){
+        } else if(e.keyCode===13){
           e.preventDefault();
           if(currentFocus > -1 && items.length > 0){
             console.log("Debug: Enter on item:", items[currentFocus].textContent);
             items[currentFocus].click();
           }
-        } else if(e.keyCode === 27){
+        } else if(e.keyCode===27){
           e.preventDefault();
           clearInput();
         }
@@ -311,96 +260,11 @@ template = '''
         }
       });
 
-      // 初次載入時調整左側表格固定表頭
+      // 每次載入後、以及畫面調整時，自動調整表格表頭的 sticky top 值
       adjustStickyHeaders();
-
-      // 拖曳分隔線功能
-      const divider = document.getElementById('divider');
-      const leftPanel = document.getElementById('leftPanel');
-      const rightPanel = document.getElementById('rightPanel');
-      const mainContainer = document.getElementById('mainContainer');
-      let isResizing = false;
-
-      divider.addEventListener('mousedown', function(e) {
-        isResizing = true;
-        console.log("Debug: 開始拖曳分隔線，初始位置：" + e.clientX);
-      });
-
-      document.addEventListener('mousemove', function(e) {
-        if (!isResizing) return;
-        let containerOffsetLeft = mainContainer.getBoundingClientRect().left;
-        let pointerRelativeXpos = e.clientX - containerOffsetLeft;
-        let containerWidth = mainContainer.getBoundingClientRect().width;
-        let leftWidthPercent = (pointerRelativeXpos / containerWidth) * 100;
-        if (leftWidthPercent < 20) leftWidthPercent = 20;
-        if (leftWidthPercent > 100) leftWidthPercent = 100;
-        leftPanel.style.width = leftWidthPercent + '%';
-        if(rightPanel.style.display !== "none") {
-          let newRightWidthPercent = 100 - leftWidthPercent;
-          rightPanel.style.width = newRightWidthPercent + '%';
-          lastRightWidthPercent = newRightWidthPercent;
-        } else {
-          rightPanel.style.width = "0%";
-        }
-        console.log("Debug: 拖曳中，左側寬度：" + leftWidthPercent.toFixed(2) + "%");
-        adjustStickyHeaders();
-      });
-
-      document.addEventListener('mouseup', function(e) {
-        if (isResizing) {
-          console.log("Debug: 結束拖曳分隔線");
-        }
-        isResizing = false;
-      });
-
-      // 點擊左側表格儲存格時，顯示右側區域並在上方顯示所點選的文字（非表頭、非純數字）
-      document.getElementById("resultContainer").addEventListener("click", function(e){
-        var td = e.target.closest("td");
-        if(!td) return;
-        if(td.closest("thead")) return;
-        var text = td.innerText.trim();
-        if(text === "" || !isNaN(Number(text))) return;
-        var rightPanel = document.getElementById("rightPanel");
-        var divider = document.getElementById("divider");
-        var leftPanel = document.getElementById("leftPanel");
-        if(rightPanel.style.display === "none" || rightPanel.style.display === ""){
-             rightPanel.style.display = "block";
-             divider.style.display = "block";
-             leftPanel.style.width = (100 - lastRightWidthPercent) + '%';
-             rightPanel.style.width = lastRightWidthPercent + '%';
-             document.getElementById("toggleSidebarBtn").textContent = "隱藏側邊欄";
-             adjustStickyHeaders();
-        }
-        var computedStyle = window.getComputedStyle(td);
-        var fontSize = computedStyle.fontSize;
-        rightPanel.innerHTML = '<div style="color: darkred; font-weight: bold; font-size: ' + fontSize + ';">' + text + '</div>';
-      });
     });
 
-    // 右側隱藏/顯示切換功能
-    function toggleRightPanel(){
-      var rightPanel = document.getElementById("rightPanel");
-      var divider = document.getElementById("divider");
-      var leftPanel = document.getElementById("leftPanel");
-      var btn = document.getElementById("toggleSidebarBtn");
-      if(rightPanel.style.display === "none" || rightPanel.style.display === ""){
-           rightPanel.style.display = "block";
-           divider.style.display = "block";
-           leftPanel.style.width = (100 - lastRightWidthPercent) + '%';
-           rightPanel.style.width = lastRightWidthPercent + '%';
-           btn.textContent = "隱藏側邊欄";
-           adjustStickyHeaders();
-      } else {
-           lastRightWidthPercent = parseFloat(rightPanel.style.width) || lastRightWidthPercent;
-           rightPanel.style.display = "none";
-           divider.style.display = "none";
-           leftPanel.style.width = "100%";
-           btn.textContent = "顯示側邊欄";
-           adjustStickyHeaders();
-      }
-    }
-
-    // 下拉選單相關函式
+    // 下拉選單相關函式保持不變
     function populateDropdown(optionList){
       var dropdown = document.getElementById("dropdown");
       dropdown.innerHTML = "";
@@ -487,21 +351,16 @@ template = '''
       var ws = XLSX.utils.table_to_sheet(table);
       XLSX.utils.book_append_sheet(wb, ws, "查詢結果");
       XLSX.writeFile(wb, "result.xlsx");
-    }
+    }      
 
-    // fetchResult 改進：加入 response.ok 檢查
     function fetchResult(code){
       console.log("Debug: fetchResult code=", code);
       fetch("/get_result/" + code.toLowerCase())
-        .then(function(resp){
-          if (!resp.ok) {
-            throw new Error("HTTP error " + resp.status);
-          }
-          return resp.text();
-        })
+        .then(function(resp){ return resp.text(); })
         .then(function(data){
           console.log("Debug: /get_result response:", data);
           document.getElementById("resultContainer").innerHTML = data;
+          // 每次載入結果後也調整表頭 sticky top 值
           adjustStickyHeaders();
         })
         .catch(function(err){
@@ -510,31 +369,38 @@ template = '''
         });
     }
 
-    // 固定表頭：僅針對左側面板內表格，根據最新寬度重新計算 top 值
+    // 新增：根據上方固定區域高度動態調整表格前三列的 sticky top 值
     function adjustStickyHeaders(){
-      var leftPanel = document.getElementById("leftPanel");
-      var baseOffset = 0;
-      var row1Ths = leftPanel.querySelectorAll("table thead tr:nth-child(1) th");
-      var row2Ths = leftPanel.querySelectorAll("table thead tr:nth-child(2) th");
-      var row3Ths = leftPanel.querySelectorAll("table thead tr:nth-child(3) th");
+      // 取得上方固定區域高度；若不存在則預設 0
+      var fixedHeader = document.querySelector(".fixed-header");
+      var fixedHeight = fixedHeader ? fixedHeader.getBoundingClientRect().height : 0;
+      
+      // 取得表格前三列的 th 集合
+      var row1Ths = document.querySelectorAll("thead tr:nth-child(1) th");
+      var row2Ths = document.querySelectorAll("thead tr:nth-child(2) th");
+      var row3Ths = document.querySelectorAll("thead tr:nth-child(3) th");
+      
       if (row1Ths.length > 0) {
         var row1Height = row1Ths[0].getBoundingClientRect().height;
         row1Ths.forEach(function(th) {
-          th.style.top = baseOffset + "px";
+          th.style.top = fixedHeight + "px";
         });
         if (row2Ths.length > 0) {
           var row2Height = row2Ths[0].getBoundingClientRect().height;
           row2Ths.forEach(function(th) {
-            th.style.top = (baseOffset + row1Height) + "px";
+            th.style.top = (fixedHeight + row1Height) + "px";
           });
           if (row3Ths.length > 0) {
             row3Ths.forEach(function(th) {
-              th.style.top = (baseOffset + row1Height + row2Height) + "px";
+              th.style.top = (fixedHeight + row1Height + row2Height) + "px";
             });
           }
         }
       }
     }
+
+    window.addEventListener("load", adjustStickyHeaders);
+    window.addEventListener("resize", adjustStickyHeaders);
   </script>
 </head>
 <body>
@@ -552,25 +418,14 @@ template = '''
         </div>
       </div>
       <div class="button-group">
-        <button id="toggleSidebarBtn" onclick="toggleRightPanel()">顯示側邊欄</button>
         <button onclick="clearInput()">清除</button>
         <button id="downloadXLSXButton" onclick="downloadXLSX()">下載 XLSX 檔案</button>
         <button style="display:none" onclick="alert('下載 CSV...')">下載 CSV 檔</button>
       </div>
     </div>
   </div>
-  <!-- 主容器：左右兩側版面 -->
-  <div id="mainContainer">
-    <div id="leftPanel">
-      <div id="resultContainer"></div>
-    </div>
-    <div id="divider"></div>
-    <div id="rightPanel">
-      <div id="textDisplay">
-        這裡顯示文字資料，您可以根據需求修改此區內容。
-      </div>
-    </div>
-  </div>
+  <!-- 移除 <hr>，結果區僅由 #resultContainer 控制間隔 -->
+  <div id="resultContainer"></div>
 </body>
 </html>
 '''
