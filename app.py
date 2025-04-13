@@ -3,10 +3,14 @@
 1. 頁面首次載入或重新整理時，強制將右側區域隱藏，並將切換按鈕文字設為「顯示側邊欄」。
 2. 當切換右側側邊欄時，依據變動後的寬度重新計算左側表格固定前三列的 top 值。
 3. 當下拉選單選定後，左側顯示表格內容，並在使用者以滑鼠左鍵點擊表格內（非表頭且非純數字）的儲存格時，
-   右側區域自動顯示（先清空內容），並在右側上方以暗紅色粗體顯示該選定字詞（字體大小與儲存格一致）。
-4. 拖曳分隔線時，左側寬度改變也會重新計算固定表頭。
+   右側區域自動顯示。右側區域分為上下兩個部分，由水平分隔線分隔：
+      - 上半部 (upperRightPanel)：顯示預設備註 (.txt) 檔內容，但最上方先顯示左側點選的字詞（暗紅色粗體），
+        其下方以細體黑字呈現 .txt 內容。
+      - 下半部 (lowerRightPanel)：亦顯示點選的字詞（暗紅色粗體）。
+4. 拖曳分隔線時，左側寬度改變會重新計算固定表頭；右側水平分隔線可上下移動以調整上下區域高度。
 5. fetchResult 函式加入 response.ok 檢查，提供更明確錯誤訊息。
 6. 全域監聽 ESC 鍵，按下 ESC 鍵時會呼叫 clearInput() 清除左側表格內容與下拉選單內容。
+7. 調整右側預設上下高度比例為2:1 (上半部 66.67%, 下半部 33.33%)，並將分隔線高度調整為 2pt。
 """
 
 import json
@@ -19,7 +23,7 @@ from io import StringIO
 from openpyxl import Workbook
 import tempfile
 
-UPDATE_DATE = '2025/04/06'  # 更新日期
+UPDATE_DATE = '2025/04/13'  # 更新日期
 
 MY_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_HTML_DIR = os.path.join(MY_SCRIPT_DIR, 'cache')
@@ -58,6 +62,8 @@ for code, title in sorted(book_list.items()):
 
 app.logger.info(f"總共 {len(formatted_books)} 個選項")
 
+# 新增：預設備註資料夾變數
+DEFAULT_NOTES_DIR = os.path.join(MY_SCRIPT_DIR, 'default_notes')
 
 @app.route("/get_result/<code>")
 def get_result(code):
@@ -92,7 +98,6 @@ def get_result(code):
         app.logger.error(f"讀檔案失敗: {e}")
         return f"<p>讀檔案失敗: {e}</p>"
 
-
 @app.route("/download_csv")
 def download_csv():
     app.logger.debug("download_csv() - 準備匯出 CSV")
@@ -108,7 +113,6 @@ def download_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment;filename=books.csv"}
     )
-
 
 @app.route("/download_xlsx")
 def download_xlsx():
@@ -129,8 +133,26 @@ def download_xlsx():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+# 新增：取得預設備註檔內容的路由
+@app.route("/get_default_note/<word>")
+def get_default_note(word):
+    """
+    透過傳入的字詞 (word) 組合預設備註檔案路徑，讀取並回傳 .txt 檔案內容。
+    """
+    note_path = os.path.join(DEFAULT_NOTES_DIR, f"{word}.txt")
+    if not os.path.exists(note_path):
+        app.logger.debug(f"找不到預設備註檔：{note_path}")
+        return ""
+    try:
+        with open(note_path, "r", encoding="utf-8") as f:
+            note_content = f.read()
+        app.logger.debug(f"成功讀取預設備註檔：{note_path}")
+        return note_content
+    except Exception as e:
+        app.logger.error(f"讀取預設備註檔失敗：{e}")
+        return ""
 
-# 前端模板：包含左右版面切割、拖曳分隔線、右側隱藏/顯示切換及固定表頭更新功能
+# 前端模板：包含左右版面切割、拖曳分隔線、右側隱藏/顯示切換、右側水平分隔線（可拖曳調整上下區域）及固定表頭更新功能
 template = '''
 <!DOCTYPE html>
 <html lang="zh">
@@ -221,16 +243,36 @@ template = '''
       width: 75%;
       padding-top: 0;
     }
+    /* 右側面板以 flex 垂直排列子元件 */
     #rightPanel {
       width: 25%;
       display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+    /* 右側上半部（顯示 .txt 內容，並在最上方也顯示選取字詞） */
+    #upperRightPanel {
+      height: 66.67%;
+      overflow: auto;
+      border-bottom: 1px solid #ccc;
+    }
+    /* 右側水平分隔線 (改為 4pt) */
+    #horizontalDivider {
+      height: 4pt;
+      background-color: #333;
+      cursor: row-resize;
+    }
+    /* 右側下半部（顯示選取字詞，暗紅色粗體） */
+    #lowerRightPanel {
+      height: 33.33%;
+      overflow: auto;
     }
     /* 左側結果區 */
     #resultContainer {
       margin-top: 0;
       padding-top: 0;
     }
-    /* 分隔線 */
+    /* 分隔線（左右） */
     #divider {
       width: 5px;
       background-color: #333;
@@ -314,7 +356,7 @@ template = '''
       // 初次載入時調整左側表格固定表頭
       adjustStickyHeaders();
 
-      // 拖曳分隔線功能
+      // 拖曳左右分隔線功能
       const divider = document.getElementById('divider');
       const leftPanel = document.getElementById('leftPanel');
       const rightPanel = document.getElementById('rightPanel');
@@ -353,7 +395,38 @@ template = '''
         isResizing = false;
       });
 
-      // 點擊左側表格儲存格時，顯示右側區域並在上方顯示所點選的文字（非表頭、非純數字）
+      // 右側水平分隔線拖曳功能
+      const horizontalDivider = document.getElementById('horizontalDivider');
+      const upperRightPanel = document.getElementById('upperRightPanel');
+      const lowerRightPanel = document.getElementById('lowerRightPanel');
+      let isResizingRight = false;
+
+      horizontalDivider.addEventListener('mousedown', function(e) {
+        isResizingRight = true;
+        console.log("Debug: 開始拖曳右側水平分隔線，初始位置：" + e.clientY);
+      });
+
+      document.addEventListener('mousemove', function(e) {
+        if (!isResizingRight) return;
+        let rightPanelRect = document.getElementById('rightPanel').getBoundingClientRect();
+        let offsetY = e.clientY - rightPanelRect.top;
+        const minHeight = 20;
+        const maxHeight = rightPanelRect.height - 20 - horizontalDivider.offsetHeight;
+        if (offsetY < minHeight) offsetY = minHeight;
+        if (offsetY > maxHeight) offsetY = maxHeight;
+        upperRightPanel.style.height = offsetY + "px";
+        lowerRightPanel.style.height = (rightPanelRect.height - offsetY - horizontalDivider.offsetHeight) + "px";
+        console.log("Debug: 右側水平分隔線移動, 上區高度：" + offsetY + "px");
+      });
+
+      document.addEventListener('mouseup', function(e) {
+        if (isResizingRight) {
+          console.log("Debug: 結束拖曳右側水平分隔線");
+        }
+        isResizingRight = false;
+      });
+
+      // 點擊左側表格儲存格時，顯示右側區域並更新右側上下區域內容
       document.getElementById("resultContainer").addEventListener("click", function(e){
         var td = e.target.closest("td");
         if(!td) return;
@@ -361,11 +434,9 @@ template = '''
         var text = td.innerText.trim();
         if(text === "" || !isNaN(Number(text))) return;
         var rightPanel = document.getElementById("rightPanel");
-        var divider = document.getElementById("divider");
         var leftPanel = document.getElementById("leftPanel");
         if(rightPanel.style.display === "none" || rightPanel.style.display === ""){
-             rightPanel.style.display = "block";
-             divider.style.display = "block";
+             rightPanel.style.display = "flex";
              leftPanel.style.width = (100 - lastRightWidthPercent) + '%';
              rightPanel.style.width = lastRightWidthPercent + '%';
              document.getElementById("toggleSidebarBtn").textContent = "隱藏側邊欄";
@@ -373,7 +444,28 @@ template = '''
         }
         var computedStyle = window.getComputedStyle(td);
         var fontSize = computedStyle.fontSize;
-        rightPanel.innerHTML = '<div style="color: darkred; font-weight: bold; font-size: ' + fontSize + ';">' + text + '</div>';
+        var upperPanel = document.getElementById("upperRightPanel");
+        var lowerPanel = document.getElementById("lowerRightPanel");
+        // 下半部依然顯示選取字詞（暗紅色粗體）
+        lowerPanel.innerHTML = '<div style="color: darkred; font-weight: bold; font-size: ' + fontSize + ';">' + text + '</div>';
+        
+        // 透過 fetch 讀取預設備註內容，將上半部更新為：先顯示選取字詞，再顯示 .txt 檔案內容（細體黑字）
+        fetch("/get_default_note/" + encodeURIComponent(text))
+          .then(function(resp) {
+              if (!resp.ok) {
+                  throw new Error("HTTP error " + resp.status);
+              }
+              return resp.text();
+          })
+          .then(function(noteContent) {
+              upperPanel.innerHTML = 
+                  '<div style="color: darkred; font-weight: bold; font-size: ' + fontSize + ';">' + text + '</div>' +
+                  '<div style="color: black; font-weight: normal; font-size: ' + fontSize + ';">' + noteContent + '</div>';
+          })
+          .catch(function(err){
+              console.error("讀取預設備註失敗:", err);
+              upperPanel.innerHTML = '<div style="color: darkred; font-weight: bold; font-size: ' + fontSize + ';">' + text + '</div>';
+          });
       });
     });
 
@@ -384,7 +476,7 @@ template = '''
       var leftPanel = document.getElementById("leftPanel");
       var btn = document.getElementById("toggleSidebarBtn");
       if(rightPanel.style.display === "none" || rightPanel.style.display === ""){
-           rightPanel.style.display = "block";
+           rightPanel.style.display = "flex";
            divider.style.display = "block";
            leftPanel.style.width = (100 - lastRightWidthPercent) + '%';
            rightPanel.style.width = lastRightWidthPercent + '%';
@@ -565,9 +657,14 @@ template = '''
       <div id="resultContainer"></div>
     </div>
     <div id="divider"></div>
+    <!-- 右側區域：分為上下兩部分 -->
     <div id="rightPanel">
-      <div id="textDisplay">
-        這裡顯示文字資料，您可以根據需求修改此區內容。
+      <div id="upperRightPanel">
+        <!-- 預設備註內容及選取字詞（上半部）將顯示在此 -->
+      </div>
+      <div id="horizontalDivider"></div>
+      <div id="lowerRightPanel">
+        <!-- 選取的字詞（暗紅色粗體，下半部）將顯示在此 -->
       </div>
     </div>
   </div>
