@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>雲端經文查詢</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="tabs">
+    <div class="tab active" data-tab="query">經文名相查詢</div>
+    <div class="tab"      data-tab="ranking">經本排行</div>
+  </div>
+
+  <!-- 兩個分頁的容器 -->
+  <div id="query"   class="tab-content active">{% include 'query.html'   %}</div>
+  <div id="ranking" class="tab-content"        >{% include 'ranking.html' %}</div>
+
+  <!-- 全域資料與互動腳本 -->
+  <script id="options-data" type="application/json">
+    {{ options|tojson|safe }}
+  </script>
+  <script type="module" src="{{ url_for('static', filename='js/tabs.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='js/init.js') }}"></script>
+</body>
+</html>

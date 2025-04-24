@@ -1,0 +1,40 @@
+<div class="top-bar">
+    <div class="input-group">
+      <label>輸入經名：</label>
+      <div class="dropdown-container">
+        <div class="input-wrapper">
+          <input type="text" id="searchInput" placeholder="請輸入關鍵字...">
+          <span id="toggleDropdown">&#9660;</span>
+        </div>
+        <div id="dropdown"></div>
+      </div>
+      <button id="clearBtn">清除</button>
+    </div>
+    <div class="button-group">
+      <button id="toggleSidebarBtn">顯示側邊欄</button>
+      <button id="downloadXLSXButton">下載 XLSX</button>
+    </div>
+  </div>
+  
+  <div id="mainContainer">
+    <div id="leftPanel">
+      <div id="resultContainer"></div>
+      <!-- 新增：懸浮半透明 Home/End 按鈕 -->
+      <button class="scroll-btn up" title="回到最上方">▲</button>
+      <button class="scroll-btn down" title="回到最下方">▼</button>
+    </div>
+    <div id="divider"></div>
+    <div id="rightPanel">
+      <div id="upperRightPanel">
+        <div id="upperControls">
+          <button id="increaseFontBtn">A+</button>
+          <button id="decreaseFontBtn">A-</button>
+          <button id="copyUpperBtn">複</button>
+        </div>
+        <div id="upperContent"></div>
+      </div>
+      <div id="horizontalDivider"></div>
+      <div id="lowerRightPanel"></div>
+    </div>
+  </div>
+  

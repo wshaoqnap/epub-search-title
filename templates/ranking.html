@@ -1,0 +1,104 @@
+{# templates/ranking.html #}
+<script>
+  console.log('【Ranking】載入經本排行榜模板');
+</script>
+
+<div class="top-bar" style="padding-top:2pt; padding-bottom:2pt; margin:0;">
+  <div></div>
+  <div class="button-group">
+    <button id="rankingDownloadXLSXButton">下載 XLSX</button>
+  </div>
+</div>
+
+<hr style="border:0; border-top:1px solid #ccc; margin:0 0.5em;">
+
+<!-- 容器定位，可放置浮動按鈕 -->
+<div id="rankingContainer" style="position:relative; flex:1;">
+  <iframe id="rankingIframe"
+          src="{{ url_for('static', filename='html/total_titles.html') }}"
+          style="width:100%; height:100%; border:none; display:block;"></iframe>
+
+  <!-- 浮動按鈕，預設隱藏 -->
+  <div id="rankHomeBtn" 
+       style="position:absolute; top:12px; right:12px; width:32px; height:32px; display:none;
+              background:rgba(255,255,255,0.7); border:1px solid #ccc; border-radius:50%; cursor:pointer;
+              align-items:center; justify-content:center; z-index:1000; font-size:16px; text-align:center; line-height:32px;">
+    ▲
+  </div>
+  <div id="rankEndBtn" 
+       style="position:absolute; bottom:12px; right:12px; width:32px; height:32px; display:none;
+              background:rgba(255,255,255,0.7); border:1px solid #ccc; border-radius:50%; cursor:pointer;
+              align-items:center; justify-content:center; z-index:1000; font-size:16px; text-align:center; line-height:32px;">
+    ▼
+  </div>
+</div>
+
+<script>
+  // 初始化浮動按鈕與互動
+  function initRankingIframe() {
+    const iframe = document.getElementById('rankingIframe');
+    const container = document.getElementById('rankingContainer');
+    const doc = iframe.contentDocument;
+    const table = doc.querySelector('table');
+    if (!table) return;
+
+    // 顯示浮動按鈕
+    const btnHome = document.getElementById('rankHomeBtn');
+    const btnEnd = document.getElementById('rankEndBtn');
+    btnHome.style.display = 'flex';
+    btnEnd.style.display = 'flex';
+
+    // 點擊滾動
+    btnHome.onclick = () => { iframe.contentWindow.scrollTo(0, 0); };
+    btnEnd.onclick = () => { iframe.contentWindow.scrollTo(0, iframe.contentWindow.document.documentElement.scrollHeight); };
+
+    // 經文名點擊跳轉查詢
+    doc.querySelectorAll('tbody td:first-child').forEach(cell => {
+      cell.style.cursor = 'pointer';
+      cell.addEventListener('click', () => {
+        const word = cell.innerText.trim();
+        // 切到查詢分頁
+        document.querySelector('.tab[data-tab="query"]').click();
+        // 填入並觸發搜尋
+        const input = document.getElementById('searchInput');
+        input.value = word;
+        input.dispatchEvent(new Event('input'));
+        // 自動點擊下拉項目，執行 fetchResult
+        setTimeout(() => {
+          const dd = document.getElementById('dropdown');
+          if (!dd) return;
+          const option = Array.from(dd.children).find(div => div.textContent === word);
+          if (option) option.click();
+        }, 0);
+      });
+    });
+  }
+
+  // 下載 XLSX
+  document.getElementById('rankingDownloadXLSXButton').addEventListener('click', () => {
+    const iframe = document.getElementById('rankingIframe');
+    const tbl = iframe.contentDocument.querySelector('table');
+    if (!tbl) return alert('找不到表格');
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.table_to_sheet(tbl);
+    XLSX.utils.book_append_sheet(wb, ws, '經本排行榜');
+    XLSX.writeFile(wb, 'ranking.xlsx');
+  });
+
+  // iframe 載入完成後初始化
+  document.getElementById('rankingIframe').addEventListener('load', initRankingIframe);
+
+  // 鍵盤 Home/End 操作
+  window.addEventListener('keydown', e => {
+    if (document.querySelector('.tab-content.active').id !== 'ranking') return;
+    const iframe = document.getElementById('rankingIframe');
+    if (e.key === 'Home') {
+      iframe.contentWindow.scrollTo(0, 0);
+      e.preventDefault();
+    }
+    if (e.key === 'End') {
+      iframe.contentWindow.scrollTo(0, iframe.contentWindow.document.documentElement.scrollHeight);
+      e.preventDefault();
+    }
+  });
+</script>
