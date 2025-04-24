@@ -42,6 +42,47 @@
     const table = doc.querySelector('table');
     if (!table) return;
 
+    // 設定表格固定佈局並新增 colgroup，第一欄預設寬度為1/6
+    table.style.tableLayout = 'fixed';
+    const ths = table.querySelectorAll('thead th');
+    const colCount = ths.length;
+    const colgroup = doc.createElement('colgroup');
+    const firstCol = doc.createElement('col');
+    firstCol.id = 'col1';
+    firstCol.style.width = '16.6667%';
+    colgroup.appendChild(firstCol);
+    for (let i = 1; i < colCount; i++) colgroup.appendChild(doc.createElement('col'));
+    table.prepend(colgroup);
+
+    // 允許使用者拖拉調整第一欄寬度
+    doc.querySelectorAll('thead th:first-child, tbody td:first-child').forEach(cell => {
+      cell.style.position = 'relative';
+      const resizer = doc.createElement('div');
+      Object.assign(resizer.style, {
+        position: 'absolute', top: 0, right: 0,
+        width: '15px', height: '100%', cursor: 'col-resize',
+        userSelect: 'none', backgroundColor: 'lightgray'
+      });
+      cell.appendChild(resizer);
+      resizer.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const startX = e.pageX;
+        const startWidth = cell.offsetWidth;
+        function onMouseMove(e) {
+          const dx = e.pageX - startX;
+          const newWidth = startWidth + dx;
+          const pct = (newWidth / table.offsetWidth) * 100;
+          doc.getElementById('col1').style.width = pct + '%';
+        }
+        function onMouseUp() {
+          doc.removeEventListener('mousemove', onMouseMove);
+          doc.removeEventListener('mouseup', onMouseUp);
+        }
+        doc.addEventListener('mousemove', onMouseMove);
+        doc.addEventListener('mouseup', onMouseUp);
+      });
+    });
+
     // 顯示浮動按鈕
     const btnHome = document.getElementById('rankHomeBtn');
     const btnEnd = document.getElementById('rankEndBtn');
@@ -57,13 +98,10 @@
       cell.style.cursor = 'pointer';
       cell.addEventListener('click', () => {
         const word = cell.innerText.trim();
-        // 切到查詢分頁
         document.querySelector('.tab[data-tab="query"]').click();
-        // 填入並觸發搜尋
         const input = document.getElementById('searchInput');
         input.value = word;
         input.dispatchEvent(new Event('input'));
-        // 自動點擊下拉項目，執行 fetchResult
         setTimeout(() => {
           const dd = document.getElementById('dropdown');
           if (!dd) return;
