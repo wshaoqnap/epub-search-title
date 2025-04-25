@@ -19,16 +19,14 @@
           style="width:100%; height:100%; border:none; display:block;"></iframe>
 
   <!-- 浮動按鈕，預設隱藏 -->
-  <div id="rankHomeBtn" 
-       style="position:absolute; bottom:48px; right:12px; width:32px; height:32px; display:none;
-              background:rgba(255,255,255,0.7); border:1px solid #ccc; border-radius:50%; cursor:pointer;
-              align-items:center; justify-content:center; z-index:1000; font-size:16px; text-align:center; line-height:32px;">
+  <div id="rankHomeBtn" style="position:absolute; bottom:48px; right:12px; width:32px; height:32px; display:none;
+               background:rgba(255,255,255,0.7); border:1px solid #ccc; border-radius:50%; cursor:pointer;
+               align-items:center; justify-content:center; z-index:1000; font-size:16px; text-align:center; line-height:32px;">
     ▲
   </div>
-  <div id="rankEndBtn" 
-       style="position:absolute; bottom:12px; right:12px; width:32px; height:32px; display:none;
-              background:rgba(255,255,255,0.7); border:1px solid #ccc; border-radius:50%; cursor:pointer;
-              align-items:center; justify-content:center; z-index:1000; font-size:16px; text-align:center; line-height:32px;">
+  <div id="rankEndBtn" style="position:absolute; bottom:12px; right:12px; width:32px; height:32px; display:none;
+               background:rgba(255,255,255,0.7); border:1px solid #ccc; border-radius:50%; cursor:pointer;
+               align-items:center; justify-content:center; z-index:1000; font-size:16px; text-align:center; line-height:32px;">
     ▼
   </div>
 </div>
@@ -42,20 +40,39 @@
     const table = doc.querySelector('table');
     if (!table) return;
 
-    // 設定表格固定佈局並新增 colgroup，第一欄預設寬度為1/6
+    // 設定表格固定佈局並新增 colgroup，第一欄4ch、第二欄預設寬度1/5
+    console.log('[Ranking] 設定第一欄為4ch，第二欄預設寬度20%');
     table.style.tableLayout = 'fixed';
     const ths = table.querySelectorAll('thead th');
     const colCount = ths.length;
     const colgroup = doc.createElement('colgroup');
+    // 第一欄
     const firstCol = doc.createElement('col');
     firstCol.id = 'col1';
-    firstCol.style.width = '16.6667%';
+    firstCol.style.width = '4ch';
     colgroup.appendChild(firstCol);
-    for (let i = 1; i < colCount; i++) colgroup.appendChild(doc.createElement('col'));
+    // 第二欄
+    const secondCol = doc.createElement('col');
+    secondCol.id = 'col2';
+    secondCol.style.width = '20%';
+    colgroup.appendChild(secondCol);
+    // 其餘欄位
+    for (let i = 2; i < colCount; i++) {
+      colgroup.appendChild(doc.createElement('col'));
+    }
     table.prepend(colgroup);
 
-    // 允許使用者拖拉調整第一欄寬度
-    doc.querySelectorAll('thead th:first-child, tbody td:first-child').forEach(cell => {
+    // 第一欄(排名)內容靠右對齊
+    doc.querySelectorAll('tbody td:first-child').forEach(cell => {
+      cell.style.textAlign = 'right';
+    });
+    // 第二欄(經文名)內容靠左對齊
+    doc.querySelectorAll('tbody td:nth-child(2)').forEach(cell => {
+      cell.style.textAlign = 'left';
+    });
+
+    // 經文名欄(第二欄)可拖拉調整寬度
+    doc.querySelectorAll('thead th:nth-child(2), tbody td:nth-child(2)').forEach(cell => {
       cell.style.position = 'relative';
       const resizer = doc.createElement('div');
       Object.assign(resizer.style, {
@@ -72,7 +89,7 @@
           const dx = e.pageX - startX;
           const newWidth = startWidth + dx;
           const pct = (newWidth / table.offsetWidth) * 100;
-          doc.getElementById('col1').style.width = pct + '%';
+          doc.getElementById('col2').style.width = pct + '%';
         }
         function onMouseUp() {
           doc.removeEventListener('mousemove', onMouseMove);
@@ -94,7 +111,7 @@
     btnEnd.onclick = () => { iframe.contentWindow.scrollTo(0, iframe.contentWindow.document.documentElement.scrollHeight); };
 
     // 經文名點擊跳轉查詢
-    doc.querySelectorAll('tbody td:first-child').forEach(cell => {
+    doc.querySelectorAll('tbody td:nth-child(2)').forEach(cell => {
       cell.style.cursor = 'pointer';
       cell.addEventListener('click', () => {
         const word = cell.innerText.trim();
