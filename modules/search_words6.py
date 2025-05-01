@@ -5,7 +5,7 @@ import re
 from search_epub import search_one_epub
 
 
-def search_words6_in_epub(words6_result, epub_path, logger=None):
+def search_words6_in_epub(words6_result, epub_path, logger=None, ignore_cache=False):
     """計算 words6_result 中的所有關鍵字, 在單一 epub 出現的總次數"""
     for main_key, main_val in words6_result.items():
         # main_val 是一個 dict: {
@@ -21,7 +21,7 @@ def search_words6_in_epub(words6_result, epub_path, logger=None):
         #  題目指示所有字串都要計算，包含主 key)
         # 先計算 main_key 自身的出現狀況
         if main_key != "id":  # "id" 不需計算
-            found_result = search_one_epub(epub_path, main_key, logger)
+            found_result = search_one_epub(epub_path, main_key, logger=logger, ignore_cache=ignore_cache)
             # 新增 "found" 欄位於該主key的dict中
             main_val["found"] = found_result
         else:
@@ -62,7 +62,7 @@ def search_words6_in_epub(words6_result, epub_path, logger=None):
                 new_dict_for_category = {}
                 for search_word in category_list:
                     # 對每個字串搜尋
-                    found_result = search_in_epub(epub_path, search_word)
+                    found_result = search_one_epub(epub_path, search_word, logger=logger, ignore_cache=ignore_cache)
                     new_dict_for_category[search_word] = found_result
                 # 將 category_key 的值替換為這個 dict
                 main_val[category_key] = new_dict_for_category
