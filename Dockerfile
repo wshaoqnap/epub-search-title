@@ -13,7 +13,6 @@ COPY modules modules
 COPY static static
 COPY templates templates
 COPY titles titles
-COPY up_notes up_notes
 COPY utils utils
 COPY app.py .
 COPY config.py .
