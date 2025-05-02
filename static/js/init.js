@@ -180,7 +180,9 @@ typeof window !== 'undefined' && (() => {
       fetch(`/static/default_notes/${encodeURIComponent(word)}.txt`)
         .then(r => r.ok ? r.text() : Promise.reject())
         .then(text => {
-          upperContent.innerHTML = `<div style="color:darkred;font-weight:bold;">${word}</div><div>${text}</div>`;
+          upperContent.innerHTML =
+          `<div style="color:darkred;font-weight:bold;font-size:14pt;">${word}</div>` +
+          `<pre style="white-space:pre-wrap; margin:0;font-size:14pt;">${text}</pre>`;
         })
         .catch(() => {
           upperContent.innerHTML = `<div style="color:darkred;font-weight:bold;">${word}</div>`;

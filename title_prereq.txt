@@ -1,0 +1,30 @@
+1. 清空舊的來源資料整理檔 (刪除和產生都很快):
+    - 時機: 來源檔有任何變動時
+    - 執行: "src\morph_inputs\clean_all_output_morph.py"
+
+2. 清空舊的經文統計快取檔 (刪除很快, 但是產生要花30~50分鐘):
+    - 時機: "input\words6" 目錄底下有新的 "名相總表" (xlsx檔) 時
+    - 執行: "src\morph_inputs\clean_all_cache_title.py"
+
+3. 產生新的來源資料整理檔 (很快):
+    - 執行 "src\morph_inputs\morph_all_inputs.py"
+
+4. 產生經文統計快取檔 (約30~50分鐘):
+    - 執行 "src\gen_cache_by_title\gen_cache_by_title.py"
+
+5. 複製經文統計快取檔:
+    - 執行 "src\gen_cache_by_title\copy_caches.py"
+
+
+測試:
+1. 用 VSCode 測試 (用 VSCode 本身的 python)
+2. 用 docker 進行測試
+    - 要先建立 venv
+    - 準備 Dockerfile 和 requirements.txt
+
+準備上 Render:
+1. 準備連上 Github
+    - 用特定帳號進入 wsl
+    - 連入 github 進入相關工作
+2. 設定 Render 連上 Github
+
