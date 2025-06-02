@@ -1,11 +1,20 @@
 import os
 import json
 import logging
+import re
 import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
-import re
 import pickle  # 新增：用於序列化快取結果
+from typing import Dict, List, Any
+
+# 嘗試匯入第三方 regex，失敗則 fallback to built-in re
+try:
+    import regex as re_mod
+    HAS_REGEX = True
+except ImportError:
+    import re as re_mod
+    HAS_REGEX = False
 
 
 # 模組與專案目錄設定
@@ -14,6 +23,21 @@ PROJECT_ROOT = os.path.dirname(MODULE_DIR)
 # 磁碟層級快取解析後的 EPUB documents
 CACHE_DIR = os.path.join(MODULE_DIR, ".cache_epub")
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+# 建立 console logger
+MY_SCRIPT_NAME = os.path.basename(__file__)
+logger = logging.getLogger(MY_SCRIPT_NAME)
+# logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
+handler = logging.StreamHandler()
+# 設定 Formatter：包含檔案名稱、行號、函式名稱，以及僅顯示 log level 首字母
+formatter = logging.Formatter(
+    '[%(asctime)s] <%(filename)s:%(lineno)d> (%(funcName)s) [%(levelname).1s] %(message)s'
+)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 def sanitize_filename(keyword):
@@ -68,94 +92,99 @@ def load_epub(epub_path, logger=None, ignore_cache=False):
     return documents
 
 
-def search_with_wildcard_in_documents(documents, keyword, logger=None):
+# 再次優化後的 search_with_wildcard_in_documents 函式
+def search_with_wildcard_in_documents(
+    documents: Dict[str, str], keyword: str, default_len: int = 60, logger=None
+) -> Dict[str, any]:
     """
-    在已解析的文檔中，以包含萬用字元 '*' 的關鍵字進行搜尋，並依指定邏輯生成非重疊、長度受控的 snippet。
-
-    流程：
-    1. 建立正則模式，'*' 代表一個中文字。
-    2. 每頁：
-       a. 清理文字。
-       b. 找出所有 matches。
-       c. Stage1 - 逐 match 產生初始 snippet：
-          - snippet 長度為 default_len (30)
-          - 如不含 keyword，延伸至 match.end()+default_len。
-       d. Stage2 - 去重 (dedupe)，移除相同或被包含片段。
-       e. Stage3 - 非重疊 (non-overlap) 保留順序，跳過前端重疊片段。
-    3. 回傳總命中數、每頁命中數與最終 snippets。
+    支援萬用字元的全文搜尋，並依照 match 逐一擷取不重疊 snippet，
+    確保每個 snippet 至少長度 default_len，完全包含關鍵字，
+    並回傳包含 total, pages, sentences 的結果結構。
     """
     if logger is None:
         logger = logging.getLogger(__name__)
 
-    # 1. 編譯 regex pattern
-    pattern_str = re.escape(keyword).replace(r'\*', r'[\u4e00-\u9fff]')
-    pattern = re.compile(pattern_str)
-    raw_keyword = keyword.replace('*', '')
+    # 編譯 pattern： '*' 萬用字元對應任一中文字
+    # pattern = re.compile(re.escape(keyword).replace(r"\*", r"[一-鿿]"))
+    escaped = re_mod.escape(keyword)
+    if HAS_REGEX:
+        # 用 \p{Han} 匹配所有漢字
+        wildcard_pattern = escaped.replace(r"\*", r"\p{Han}")
+        pattern = re_mod.compile(wildcard_pattern, flags=re_mod.UNICODE)
+    else:
+        # 內建 re 無法 \p{Han}，改為手動列出常用與擴充A~F範圍
+        bracket = (
+            r"[\u3400-\u4DBF\u4E00-\u9FFF"
+            r"\U00020000-\U0002A6DF"
+            r"\U0002A700-\U0002B73F"
+            r"\U0002B740-\U0002B81F"
+            r"\U0002B820-\U0002CEAF"
+            r"\U0002CEB0-\U0002EBEF]"
+        )
+        wildcard_pattern = escaped.replace(r"\*", bracket)
+        pattern = re_mod.compile(wildcard_pattern)
+
+    raw_keyword = keyword.replace("*", "")
     kw_len = len(raw_keyword)
-    default_len = 30
+    result: Dict[str, Any] = {"total": 0, "pages": {}, "sentences": {}}
 
-    result = {"total": 0, "pages": {}, "sentences": {}}
-
-    # 2. 逐頁處理
     for page, text in documents.items():
-        # a. 清理文字
-        clean_text = re.sub(r'[\n\t\r]', '', text)
-        clean_text = re.sub(r'\s+', '', clean_text)
+        # 清理
+        clean_text = re_mod.sub(r"[\n\t\r]", "", text)
+        clean_text = re_mod.sub(r"\s+", "", clean_text)
         text_len = len(clean_text)
-        logger.info(f"Processing page {page}, text length {text_len}")
 
-        # b. 找 matches
+        # 找到所有 match
         matches = list(pattern.finditer(clean_text))
-        match_count = len(matches)
-        logger.info(f"Found {match_count} matches on page {page}")
-        if match_count == 0:
+        if not matches:
             continue
+
+        # 統計次數
+        match_count = len(matches)
         result["total"] += match_count
         result["pages"][page] = match_count
 
-        # c. Stage1: 產生 all_snippets
-        all_snippets = []
-        for idx, m in enumerate(matches):
-            m_start, m_end = m.start(), m.end()
-            # 初始 snippet
-            start = m_start
-            end = min(start + default_len, text_len)
-            snippet = clean_text[start:end]
-            logger.debug(f"Match {idx}: initial snippet '{snippet}' (len={len(snippet)})")
-            # 如 snippet 不含完整 keyword，再延伸
-            if not pattern.search(snippet):
-                ext_end = min(m_end + default_len, text_len)
-                snippet = clean_text[start:ext_end]
-                logger.debug(f"Match {idx}: extended snippet '{snippet}' (len={len(snippet)})")
-            all_snippets.append((m_start, snippet))
+        # 不重疊 snippet 擷取
+        snippets: List[str] = []
+        next_search_pos = 0
 
-        # d. Stage2: dedupe
-        unique_snippets = []
-        for start, sn in all_snippets:
-            if not any(sn == ex or sn in ex or ex in sn for ex in unique_snippets):
-                unique_snippets.append(sn)
-            else:
-                logger.debug(f"Dedup removing snippet: '{sn}'")
-
-        # e. Stage3: non-overlap
-        final_snippets = []
-        last_end = 0
-        for sn in unique_snippets:
-            idx = clean_text.find(sn, last_end)
-            if idx == -1:
-                logger.warning(f"Snippet not found for non-overlap: '{sn}'")
+        for m in matches:
+            # 跳過已在先前 snippet 中的 match
+            if m.start() < next_search_pos:
                 continue
-            sn_end = idx + len(sn)
-            if idx >= last_end:
-                final_snippets.append(sn)
-                logger.debug(f"Accepted snippet at {idx}-{sn_end}: '{sn}'")
-                last_end = sn_end
-            else:
-                logger.debug(f"Skipped overlapping snippet at {idx}-{sn_end}: '{sn}'")
 
-        result["sentences"][page] = final_snippets
+            # 詳細 log
+            logger.debug(f"search_with_wildcard: page={page}, match_start={m.start()}")
+
+            # 計算置中起點與結尾
+            center = m.start() + kw_len // 2
+            half_len = default_len // 2
+            start = max(center - half_len, next_search_pos)
+            end = start + default_len
+            if end > text_len:
+                end = text_len
+                start = max(text_len - default_len, next_search_pos)
+
+            # 偵測並補足被截斷的關鍵字尾部
+            snippet = clean_text[start:end]
+            for i in range(1, kw_len):
+                if snippet.endswith(raw_keyword[:i]) and end + (kw_len - i) <= text_len:
+                    end += (kw_len - i)
+                    snippet = clean_text[start:end]
+                    break
+
+            # Log 片段資訊
+            logger.debug(
+                f"snippet range: start={start}, end={end}, preview={snippet[:30]}…"
+            )
+
+            snippets.append(snippet)
+            next_search_pos = end
+
+        result["sentences"][page] = snippets
 
     return result
+
 
 
 def search_in_documents(documents, keyword, logger=None):
@@ -238,8 +267,14 @@ def search_wildcard_one_epub(epub_path, keyword, logger=None, ignore_cache=False
             "pages": {},
             "sentences": {}
         }
-    # return search_with_wildcard_in_documents(epub_path, documents, keyword, logger)
-    return search_with_wildcard_in_documents(documents, keyword, logger)
+    # --> for debugging
+    # logger.warning(f"Searching '{keyword}' in '{epub_path}'")
+    # if 'T1251' in epub_path:
+        # --> 將 documents 轉成 json 格式, 並寫入到 "D:\cbeta_v3\output\cache_by_words_test\T1251.json" 檔案中
+        # with open("D:\\cbeta_v3\\output\\cache_by_words_test\\T1251.json", "w", encoding="utf-8") as f:
+        #     json.dump(documents, f, ensure_ascii=False, indent=4)
+        # logger.warning(f"wrote the document to 'D:\\cbeta_v3\\output\\cache_by_words_test\\T1251.json'")
+    return search_with_wildcard_in_documents(documents, keyword, logger=logger)
 
 
 def search_multiple_epubs(epub_paths, keyword, logger=None, ignore_cache=False):
@@ -319,8 +354,8 @@ def search_wildcard_multiple_epubs(epub_paths, keyword, logger=None):
     for epub_path in epub_paths:
         # 提取檔名並去掉副檔名
         base_name = os.path.splitext(os.path.basename(epub_path))[0]
-        logger.debug(f"Searching keyword in '{epub_path}'")    
-        ret = search_wildcard_one_epub(epub_path, keyword, logger)
+        # logger.warning(f"Searching '{keyword}' in '{epub_path}'")    
+        ret = search_wildcard_one_epub(epub_path, keyword, logger=logger, ignore_cache=False)
         if ret["total"] > 0:
             results[base_name] = ret
     return results
