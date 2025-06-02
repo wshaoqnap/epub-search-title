@@ -13,8 +13,9 @@
     - 執行 "src\gen_cache_by_title\gen_cache_by_title.py"
 
 5. 複製經文統計快取檔:
-    - 執行 "src\gen_cache_by_title\copy_caches.py"
+    - 執行 "src\gen_cache_by_title\copy_title_caches.py"
 
+----------------------------------------------
 
 測試:
 1. 用 VSCode 測試 (用 VSCode 本身的 python)
